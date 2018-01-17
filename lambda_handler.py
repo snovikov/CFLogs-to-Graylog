@@ -5,8 +5,6 @@ import gzip
 import datetime
 import time
 
-from boto.logs.exceptions import InvalidSequenceTokenException
-
 print('Loading function')
 
 # Fixed fields
@@ -109,7 +107,7 @@ def parse_log(bucket_name, key_name):
                                     logStreamName=distribution_id,
                                     logEvents=get_sorted_records(result),
                                     sequenceToken=stream_tocken)
-                            except InvalidSequenceTokenException:
+                            except Exception:
                                 print "[parse_log] \tInvalid sequence tocken. Try to renew."
                                 stream = logs.describe_log_streams(logGroupName='CloudFront',
                                                                    logStreamNamePrefix=distribution_id)
