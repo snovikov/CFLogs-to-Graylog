@@ -66,7 +66,7 @@ def parse_log(bucket_name, key_name):
         stream_tocken = stream['logStreams'][0].get('uploadSequenceToken', '0')
 
         #--------------------------------------------------------------------------------------------------------------
-        print '[parse_log] \tRead file content for distribution %s' % distribution_id
+        print "[parse_log] \tRead content of file %s" % filename
         #--------------------------------------------------------------------------------------------------------------
         with gzip.open(local_file_path,'r') as content:
             for line in content:
@@ -81,18 +81,21 @@ def parse_log(bucket_name, key_name):
                     timestamp = int(
                         time.mktime(
                             datetime.datetime.strptime(strtime, "%Y-%m-%d %H:%M:%S").timetuple()) * 1000)
-                    result[timestamp] = dict()
+                    if timestamp not in result:
+                        result[timestamp] = list()
+                    message = dict()
                     for name in LINE_FORMAT:
                         if name == 'date' or name == 'time':
                             continue
                         if name == 'response_time_seconds':
-                            result[timestamp]['response_time_milliseconds'] = \
+                            message['response_time_milliseconds'] = \
                                 int(float(line_data[LINE_FORMAT[name]]) * 1000)
                         else:
-                            result[timestamp][name] = line_data[LINE_FORMAT[name]]
+                            message[name] = line_data[LINE_FORMAT[name]]
+                    result[timestamp].append(message)
                     num_requests += 1
 
-                    # Send messages
+                    # Send messages every 'buffer_size' messages
                     if num_requests % buffer_size == 0:
                         print '[parse_log] \tSending log records %d - %s' % \
                               (num_requests - buffer_size + 1, num_requests)
@@ -126,7 +129,8 @@ def parse_log(bucket_name, key_name):
 def get_sorted_records(result):
     send_buffer = list()
     for key in sorted(result):
-        send_buffer.append({'timestamp': key, 'message': json.dumps(result[key])})
+        for message in result[key]:
+            send_buffer.append({'timestamp': key, 'message': json.dumps(message)})
     return send_buffer
 
 
@@ -144,10 +148,10 @@ def lambda_handler(event, context):
         #--------------------------------------------------------------------------------------------------------------
         num_requests = parse_log(bucket_name, key_name)
 
-        return num_requests
     except Exception as e:
         raise e
     print '[main] End'
+    return num_requests
 
 # Test Input
 event = {
