@@ -123,11 +123,20 @@ def parse_log(bucket_name, key_name):
                     return -1
             print "[parse_log] \tSending log records %d - %s" % \
                   (num_requests - num_requests % BUFFER_SIZE + 1, num_requests)
-            logs.put_log_events(
-                logGroupName=LOG_GROUP_NAME,
-                logStreamName=distribution_id,
-                logEvents=get_sorted_records(result),
-                sequenceToken=stream_tocken)
+            for i in xrange(RETRY_ATTEMPTS):
+                try:
+                    logs.put_log_events(
+                        logGroupName=LOG_GROUP_NAME,
+                        logStreamName=distribution_id,
+                        logEvents=get_sorted_records(result),
+                        sequenceToken=stream_tocken)
+                except Exception:
+                    print "[parse_log] \tInvalid sequence tocken. Try to renew."
+                    stream = logs.describe_log_streams(logGroupName=LOG_GROUP_NAME,
+                                                       logStreamNamePrefix=distribution_id)
+                    stream_tocken = stream['logStreams'][0].get('uploadSequenceToken', '0')
+                    continue
+                break
 
     except Exception:
         print "[parse_log] \tError to read input file"
