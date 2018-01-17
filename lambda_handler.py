@@ -80,7 +80,7 @@ def parse_log(bucket_name, key_name):
 
                     timestamp = int(
                         time.mktime(
-                            datetime.datetime.strptime(strtime, "%Y-%m-%d %H:%M:%S").timetuple() * 1000))
+                            datetime.datetime.strptime(strtime, "%Y-%m-%d %H:%M:%S").timetuple()) * 1000)
                     result[timestamp] = dict()
                     for name in LINE_FORMAT:
                         if name == 'date' or name == 'time':
