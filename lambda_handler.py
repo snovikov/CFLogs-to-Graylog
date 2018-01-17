@@ -37,7 +37,9 @@ LINE_FORMAT = {
     #'fle_status': 24,
     #'fle_encrypted_fields': 25,
 }
-
+LOG_GROUP_NAME = 'CloudFront'
+BUFFER_SIZE = 1000
+RETRY_ATTEMPTS = 10
 
 #======================================================================================================================
 # Auxiliary Functions
@@ -46,8 +48,6 @@ def parse_log(bucket_name, key_name):
     print '[parse_log] Start'
 
     num_requests = 0
-    buffer_size = 1000
-    retry_attempts = 10
     result = dict()
     try:
         #--------------------------------------------------------------------------------------------------------------
@@ -60,10 +60,10 @@ def parse_log(bucket_name, key_name):
         s3.download_file(bucket_name, key_name, local_file_path)
 
         logs = boto3.client('logs')
-        stream = logs.describe_log_streams(logGroupName='CloudFront', logStreamNamePrefix=distribution_id)
+        stream = logs.describe_log_streams(logGroupName=LOG_GROUP_NAME, logStreamNamePrefix=distribution_id)
         if not stream['logStreams']:
-            logs.create_log_stream(logGroupName='CloudFront', logStreamName=distribution_id)
-            stream = logs.describe_log_streams(logGroupName='CloudFront', logStreamNamePrefix=distribution_id)
+            logs.create_log_stream(logGroupName=LOG_GROUP_NAME, logStreamName=distribution_id)
+            stream = logs.describe_log_streams(logGroupName=LOG_GROUP_NAME, logStreamNamePrefix=distribution_id)
         stream_tocken = stream['logStreams'][0].get('uploadSequenceToken', '0')
 
         #--------------------------------------------------------------------------------------------------------------
@@ -97,19 +97,19 @@ def parse_log(bucket_name, key_name):
                     num_requests += 1
 
                     # Send messages every 'buffer_size' messages
-                    if num_requests % buffer_size == 0:
+                    if num_requests % BUFFER_SIZE == 0:
                         print "[parse_log] \tSending log records %d - %s" % \
-                              (num_requests - buffer_size + 1, num_requests)
-                        for i in xrange(retry_attempts):
+                              (num_requests - BUFFER_SIZE + 1, num_requests)
+                        for i in xrange(RETRY_ATTEMPTS):
                             try:
                                 stream_response = logs.put_log_events(
-                                    logGroupName='CloudFront',
+                                    logGroupName=LOG_GROUP_NAME,
                                     logStreamName=distribution_id,
                                     logEvents=get_sorted_records(result),
                                     sequenceToken=stream_tocken)
                             except Exception:
                                 print "[parse_log] \tInvalid sequence tocken. Try to renew."
-                                stream = logs.describe_log_streams(logGroupName='CloudFront',
+                                stream = logs.describe_log_streams(logGroupName=LOG_GROUP_NAME,
                                                                    logStreamNamePrefix=distribution_id)
                                 stream_tocken = stream['logStreams'][0].get('uploadSequenceToken', '0')
                                 continue
@@ -122,9 +122,9 @@ def parse_log(bucket_name, key_name):
                     print ("[parse_log] \t\tError to process line: %s" % e)
                     return -1
             print "[parse_log] \tSending log records %d - %s" % \
-                  (num_requests - num_requests % buffer_size + 1, num_requests)
+                  (num_requests - num_requests % BUFFER_SIZE + 1, num_requests)
             logs.put_log_events(
-                logGroupName='CloudFront',
+                logGroupName=LOG_GROUP_NAME,
                 logStreamName=distribution_id,
                 logEvents=get_sorted_records(result),
                 sequenceToken=stream_tocken)
