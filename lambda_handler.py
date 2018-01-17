@@ -5,6 +5,8 @@ import gzip
 import datetime
 import time
 
+from boto.logs.exceptions import InvalidSequenceTokenException
+
 print('Loading function')
 
 # Fixed fields
@@ -47,10 +49,11 @@ def parse_log(bucket_name, key_name):
 
     num_requests = 0
     buffer_size = 1000
+    retry_attempts = 10
     result = dict()
     try:
         #--------------------------------------------------------------------------------------------------------------
-        print '[parse_log] \tDownload file from S3'
+        print "[parse_log] \tDownload file from S3"
         #--------------------------------------------------------------------------------------------------------------
         filename = key_name.split('/')[-1]
         distribution_id = filename.split('.')[0]
@@ -97,21 +100,30 @@ def parse_log(bucket_name, key_name):
 
                     # Send messages every 'buffer_size' messages
                     if num_requests % buffer_size == 0:
-                        print '[parse_log] \tSending log records %d - %s' % \
+                        print "[parse_log] \tSending log records %d - %s" % \
                               (num_requests - buffer_size + 1, num_requests)
-                        stream_response=logs.put_log_events(
-                            logGroupName='CloudFront',
-                            logStreamName=distribution_id,
-                            logEvents=get_sorted_records(result),
-                            sequenceToken=stream_tocken)
-                        stream_tocken = stream_response.get('nextSequenceToken')
+                        for i in xrange(retry_attempts):
+                            try:
+                                stream_response = logs.put_log_events(
+                                    logGroupName='CloudFront',
+                                    logStreamName=distribution_id,
+                                    logEvents=get_sorted_records(result),
+                                    sequenceToken=stream_tocken)
+                            except InvalidSequenceTokenException:
+                                print "[parse_log] \tInvalid sequence tocken. Try to renew."
+                                stream = logs.describe_log_streams(logGroupName='CloudFront',
+                                                                   logStreamNamePrefix=distribution_id)
+                                stream_tocken = stream['logStreams'][0].get('uploadSequenceToken', '0')
+                                continue
+                            stream_tocken = stream_response.get('nextSequenceToken')
+                            break
                         result = dict()
                         continue
 
                 except Exception as e:
                     print ("[parse_log] \t\tError to process line: %s" % e)
                     return -1
-            print '[parse_log] \tSending log records %d - %s' % \
+            print "[parse_log] \tSending log records %d - %s" % \
                   (num_requests - num_requests % buffer_size + 1, num_requests)
             logs.put_log_events(
                 logGroupName='CloudFront',
@@ -159,7 +171,7 @@ event = {
         {
             's3': {
                 'bucket': {
-                    'name': 'cflogs-de'
+                    'name': '<BUCKETNAME>'
                 },
                 'object': {
                     'key': '<FILENAME>'
