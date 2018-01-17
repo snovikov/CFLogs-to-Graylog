@@ -46,7 +46,7 @@ def parse_log(bucket_name, key_name):
     print '[parse_log] Start'
 
     num_requests = 0
-    buffer_size = 100
+    buffer_size = 1000
     result = dict()
     try:
         #--------------------------------------------------------------------------------------------------------------
@@ -66,7 +66,7 @@ def parse_log(bucket_name, key_name):
         stream_tocken = stream['logStreams'][0].get('uploadSequenceToken', '0')
 
         #--------------------------------------------------------------------------------------------------------------
-        print '[parse_log] \tRead file content'
+        print '[parse_log] \tRead file content for distribution %s' % distribution_id
         #--------------------------------------------------------------------------------------------------------------
         with gzip.open(local_file_path,'r') as content:
             for line in content:
@@ -78,12 +78,18 @@ def parse_log(bucket_name, key_name):
                     line_data = line.split('\t')
                     strtime = "%s %s" % (line_data[LINE_FORMAT['date']], line_data[LINE_FORMAT['time']])
 
-                    timestamp = int(time.mktime(datetime.datetime.strptime(strtime, "%Y-%m-%d %H:%M:%S").timetuple())) * 1000
+                    timestamp = int(
+                        time.mktime(
+                            datetime.datetime.strptime(strtime, "%Y-%m-%d %H:%M:%S").timetuple() * 1000))
                     result[timestamp] = dict()
                     for name in LINE_FORMAT:
                         if name == 'date' or name == 'time':
                             continue
-                        result[timestamp][name] = line_data[LINE_FORMAT[name]]
+                        if name == 'response_time_seconds':
+                            result[timestamp]['response_time_milliseconds'] = \
+                                int(float(line_data[LINE_FORMAT[name]]) * 1000)
+                        else:
+                            result[timestamp][name] = line_data[LINE_FORMAT[name]]
                     num_requests += 1
 
                     # Send messages
